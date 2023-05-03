@@ -74,15 +74,22 @@ def get_schemas_from_json(fpath):
 
 if __name__ == '__main__':
     
-    sql = "SELECT name ,  country ,  age FROM singer ORDER BY age DESC"
-    db_id = "concert_singer"
-    table_file = "tables.json"
+    sql = "SELECT T2.student_id FROM courses AS T1 JOIN student_course_registrations AS T2 ON T1.course_id = T2.course_id WHERE T1.course_name = \"statistics\" ORDER BY T2.registration_date"
+    db_id = "student_assessment"
+    table_file = "spider/tables.json"
     
     schemas, db_names, tables = get_schemas_from_json(table_file)
     schema = schemas[db_id]
     table = tables[db_id]
+    print("db_id: ", db_id)
+    print("query: ", sql)
+    print("tables in db = ", schema.keys())
+    print("columns in db = ", schema.values())
+    print("schema = ", schema)
     schema = Schema(schema, table)
+    print("schema idMap = ", schema.idMap)
     sql_label = get_sql(schema, sql)
+    print( "sql = ", sql_label)
 
 
 
