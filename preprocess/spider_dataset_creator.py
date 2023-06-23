@@ -1,9 +1,12 @@
 import itertools
 import json
+import os
 import sqlite3
 import traceback
+import random
 
 import pandas
+import pandas as pd
 
 from preprocess.parse_raw_json import get_schemas_from_json
 from preprocess.parse_sql_one import Schema
@@ -110,8 +113,95 @@ def serialize_to_json(translated_dataset):
                   separators=(',', ': '))
 
 
+def translate_data_type(col_type):
+    if col_type == "number":
+        return "double"
+    elif col_type == "boolean":
+        return "boolean"
+    elif col_type == "time":
+        return "date"
+    return "text"
+
+
+def translate_token_type(col_type):
+    if col_type == "number":
+        return "measure"
+    return "attribute"
+
+
+OUTPUT_DIR = "spider_datasets/"
+
+
+def create_query_files(translated_dataset):
+    db_id_queries = {}
+    for dataset_entry in translated_dataset:
+        db_id = dataset_entry["db_id"]
+        if db_id not in db_id_queries:
+            db_id_queries[db_id] = []
+
+        if "sage_query" not in dataset_entry:
+            print(dataset_entry)
+        else:
+            query_entry = "test {\n\t" \
+                          "query: " + dataset_entry["question"] + "\n\t" \
+                                                                  "expected: " \
+                                                                  "" +  \
+                          dataset_entry["sage_query"] + "\n}\n"
+        db_id_queries[db_id].append(query_entry)
+
+    for db_id, queries in db_id_queries.items():
+        path = OUTPUT_DIR + "/" + db_id + "/"
+        path_exists = os.path.exists(path)
+        if not path_exists:
+            # Create a new directory because it does not exist
+            os.makedirs(path)
+            print(f"The new directory {path} is created!")
+        with open(path + "test.pb", "w") as file:
+            # write to file
+            file.writelines(queries)
+
+
+def create_data_files(translated_dataset):
+    seen_db_ids = {}
+    for dataset_entry in translated_dataset:
+        db_id = dataset_entry["db_id"]
+        if db_id in seen_db_ids:
+            seen_db_ids.update({db_id, 1})
+            continue
+        col_names = dataset_entry["columns"]
+        col_types = dataset_entry["col_types"]
+        column_values = dataset_entry["column_values"]
+        col_token_types = [translate_token_type(col_type) for col_type in
+                           col_types]
+        path = OUTPUT_DIR + "/" + db_id + "/"
+        path_exists = os.path.exists(path)
+        if not path_exists:
+            # Create a new directory because it does not exist
+            os.makedirs(path)
+            print(f"The new directory {path} is created!")
+        pd.DataFrame(list(zip(col_names, col_types, col_token_types))).to_csv(
+            path + "/metadata.csv", index=False, header=False)
+        data_dict = dict(zip(col_names, column_values))
+        # Get max count from all columns. For columns with fewer number of
+        # entries, add padding with a random element from the list.
+        val_count_list = [len(val) for val in data_dict.values()]
+        max_count = max(val_count_list)
+        for k, v in data_dict.items():
+            print(f"key {k} and value len {len(v)}")
+            if len(v) == 0:
+                v += [0] * (max_count - len(v))
+            else:
+                v += [random.choice(v)] * (max_count - len(v))
+
+        pd.DataFrame(data_dict).to_csv(
+            path + "/data.csv", index=False, header=False)
+
+
 if __name__ == "__main__":
-    dataset = translate_spider_dataset_to_json()
+    # dataset = translate_spider_dataset_to_json()
     print("-------------------------------------------------------------------")
-    print(f"Serializing {len(dataset)} entries to json file {dataset}")
-    serialize_to_json(dataset)
+    # print(f"Serializing {len(dataset)} entries to json file {OUTPUT_FILE}")
+    # create_data_files(dataset)
+    with open("dataset/dataset.json") as f:
+        data = json.load(f)
+        create_query_files(data)
